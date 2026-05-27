@@ -174,6 +174,3 @@ if uploaded_files:
                             
                 except Exception as e:
                     st.error(f"Processing error encountered: {e}")
-                    
-            except Exception as e:
-                st.error(f"An error occurred during processing: {e}")
