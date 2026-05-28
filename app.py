@@ -15,7 +15,7 @@ st.subheader("Dynamic Routing: Operational Depreciated Replacement Cost (DRC) vs
 # -----------------------------------------------------------------------------
 # 2. HARDCODED SECURE KEY ACCESS
 # -----------------------------------------------------------------------------
-MASTER_API_KEY = "AIzaSyAfK09Zlf3D19L4PMwMj-Qsp-d0BUL7nXc"
+MASTER_API_KEY = "AQ.Ab8RN6IZasHARbJ0xfDruUynpXOiV9ybUJ0PUmktaDTTylERug"
 
 # -----------------------------------------------------------------------------
 # 3. SIDEBAR CONFIGURATION: PROFILE & RATES
