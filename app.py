@@ -13,7 +13,13 @@ st.title("⚖️ Statutory Plant & Machinery Valuation Platform")
 st.subheader("Fully Aligned with International Valuation Standards (IVS) & Govt Regulatory Codes")
 
 # -----------------------------------------------------------------------------
-# 2. ENHANCED SIDEBAR: USER INPUTS ONLY (API KEY REMOVED)
+# 2. HARDCODED SECURE KEY ACCESS (BYPASSES CLOUD SETTINGS)
+# -----------------------------------------------------------------------------
+# Paste your raw Gemini API key inside the quotes below:
+MASTER_API_KEY = "PASTE_YOUR_ACTUAL_GEMINI_API_KEY_HERE"
+
+# -----------------------------------------------------------------------------
+# 3. SIDEBAR CONFIGURATION: USER PROFILE & MARKT SCRAP RATES
 # -----------------------------------------------------------------------------
 with st.sidebar:
     st.header("📋 Appraiser & Statutory Profile")
@@ -42,12 +48,11 @@ with st.sidebar:
         "Mixed / Heavy Melting Scrap (HMS)": st.number_input("HMS Fallback Rate:", value=31.0)
     }
 
-# Helper function to match scrap types to user sidebar settings
 def get_scrap_rate(material_type: str) -> float:
     return rates.get(material_type, 31.0)
 
 # -----------------------------------------------------------------------------
-# 3. EXPLICIT EXTRACTION SCHEMA
+# 4. STRUCTURED DATA SPECIFICATION FOR AI
 # -----------------------------------------------------------------------------
 class StrictAssetSchema(BaseModel):
     is_pure_scrap_pile: bool = Field(description="Strictly set to True ONLY if this item is abandoned, dismantled junk, or raw metal waste. Set to False if this is an operational or stand-by asset/machine.")
@@ -62,7 +67,7 @@ class StrictAssetSchema(BaseModel):
     condition_justification: str = Field(description="Technical statement detailing observed physical wear, maintenance status, or corrosion levels to defend the appraisal.")
 
 # -----------------------------------------------------------------------------
-# 4. MULTI-FILE PIPELINE CONTROL
+# 5. MULTI-FILE GRAPHICAL INTERFACE CONTROL
 # -----------------------------------------------------------------------------
 uploaded_files = st.file_uploader(
     "Upload multiple field investigation assets simultaneously...", 
@@ -73,15 +78,14 @@ uploaded_files = st.file_uploader(
 if uploaded_files:
     st.success(f"Successfully staged {len(uploaded_files)} source verification files for processing.")
     
-    # Check if API Key exists in secure cloud secrets
-    if "GEMINI_API_KEY" not in st.secrets:
-        st.error("❌ Cloud Error: Gemini API Key is not configured in Streamlit Advanced Settings.")
+    if MASTER_API_KEY == "PASTE_YOUR_ACTUAL_GEMINI_API_KEY_HERE" or MASTER_API_KEY == "":
+        st.error("❌ Setup Error: You forgot to replace the filler text on Line 18 with your actual Gemini API Key inside the code.")
     else:
         if st.button("⚖️ Generate Statutory IVS Valuation Report"):
             with st.spinner("AI parsing assets and building compliant legal framework..."):
                 try:
-                    # Automatically pull key from secure cloud backend
-                    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+                    # Direct initialization bypassing environment variables entirely
+                    client = genai.Client(api_key=MASTER_API_KEY)
                     
                     ai_contents = [types.Part.from_bytes(data=f.read(), mime_type=f.type) for f in uploaded_files]
                     
@@ -105,7 +109,7 @@ if uploaded_files:
                     data = json.loads(response.text)
                     
                     # -----------------------------------------------------------------------------
-                    # 5. DUAL-METHOD COMPLIANCE ENGINEERING MATH
+                    # 6. BUSINESS LOGIC & EVALUATION CALCULATION ENGINE
                     # -----------------------------------------------------------------------------
                     is_scrap = data.get("is_pure_scrap_pile", False)
                     selected_mat = data.get("exact_material_category", "Mixed / Heavy Melting Scrap (HMS)")
@@ -134,9 +138,9 @@ if uploaded_files:
                         basis_used = "Market Value Basis / Depreciated Replacement Cost (DRC)"
 
                     # -----------------------------------------------------------------------------
-                    # 6. PRINT LAYOUT OUTPUT
+                    # 7. GENERATING THE OUTPUT COMPLIANCE DOCUMENT
                     # -----------------------------------------------------------------------------
-                    st.success("Analysis Complete. IVS Compliance Framework Established.")
+                    st.success("Analysis Complete. IVS Compliance Framework Purchased.")
                     
                     html_report = f"""
                     <div style='font-family: Arial, sans-serif; padding: 30px; border: 2px solid #333; background: white; color: black;'>
