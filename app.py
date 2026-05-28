@@ -8,18 +8,17 @@ import base64
 # -----------------------------------------------------------------------------
 # 1. PAGE SETUP & STATUTORY HEADER
 # -----------------------------------------------------------------------------
-st.set_page_config(page_title="IVS Compliant P&M Engine", layout="wide")
-st.title("⚖️ Statutory Plant & Machinery Valuation Platform")
-st.subheader("Fully Aligned with International Valuation Standards (IVS) & Govt Regulatory Codes")
+st.set_page_config(page_title="IVS Multi-Condition Valuation Engine", layout="wide")
+st.title("⚖️ Condition-Based Plant & Machinery Valuation Platform")
+st.subheader("Dynamic Routing: Operational Depreciated Replacement Cost (DRC) vs. Liquidation Scrap Value")
 
 # -----------------------------------------------------------------------------
 # 2. HARDCODED SECURE KEY ACCESS
 # -----------------------------------------------------------------------------
-# Leave your raw Gemini API key here unchanged since it is currently working!
 MASTER_API_KEY = "AIzaSyAfK09Zlf3D19L4PMwMj-Qsp-d0BUL7nXc"
 
 # -----------------------------------------------------------------------------
-# 3. SIDEBAR CONFIGURATION: USER PROFILE & MARKET SCRAP RATES
+# 3. SIDEBAR CONFIGURATION: PROFILE & RATES
 # -----------------------------------------------------------------------------
 with st.sidebar:
     st.header("📋 Appraiser & Statutory Profile")
@@ -52,74 +51,56 @@ def get_scrap_rate(material_type: str) -> float:
     return rates.get(material_type, 31.0)
 
 # -----------------------------------------------------------------------------
-# 4. STRUCTURED DATA SPECIFICATION FOR AI
+# 4. CONDITIONAL SCHEMAS FOR THE AI
 # -----------------------------------------------------------------------------
-class StrictAssetSchema(BaseModel):
-    is_pure_scrap_pile: bool = Field(description="Strictly set to True ONLY if this item is abandoned, dismantled junk, or raw metal waste. Set to False if this is an operational or stand-by asset/machine.")
-    asset_name: str = Field(description="Commercial/Technical name of the machine or description of scrap.")
-    manufacturer: str = Field(description="Manufacturer/Brand. Set 'Unknown' if unavailable.")
-    model_or_capacity: str = Field(description="Model number, structural sizing, or operational throughput capacity.")
-    exact_material_category: str = Field(description="Must match exactly one of these strings: 'Mild Steel (MS)', 'Stainless Steel (SS 304)', 'Stainless Steel (SS 316)', 'Cast Iron (CI)', 'Copper Heavy', 'Copper Wire/Cables', 'Aluminium Commercial', 'Brass / Gunmetal', 'Mixed / Heavy Melting Scrap (HMS)'.")
-    estimated_weight_kg: float = Field(description="Engineering assessment of total metal/equipment weight in Kilograms.")
-    estimated_cost_new: float = Field(description="Estimated modern-day market purchase price for a new equivalent of this asset if invoice is missing. Do not leave at 0.")
-    age_years: int = Field(description="Observed or deduced physical age of the equipment.")
-    useful_life_years: int = Field(description="Statutory useful economic life span based on industry standards (e.g., 15 years for general engineering).")
-    condition_justification: str = Field(description="Technical statement detailing observed physical wear, maintenance status, or corrosion levels to defend the appraisal.")
+class ConditionValuationSchema(BaseModel):
+    is_scrap_liquidation: bool = Field(description="CRITICAL DIRECTION: Set to True ONLY if the asset is completely dismantled, broken beyond economic repair, or raw waste metal. Set to False if it is a complete, identifiable machine (even if currently un-used or rusted).")
+    asset_name: str = Field(description="Commercial name of the machine or scrap description.")
+    manufacturer: str = Field(description="Manufacturer/Brand. Set 'N/A' if raw scrap material.")
+    model_or_capacity: str = Field(description="Model number or capacity specifications.")
+    exact_material_category: str = Field(description="Must match exactly one of the strings in the Scrap Registry sidebar.")
+    estimated_weight_kg: float = Field(description="Engineering assessment of total machinery or metal weight in Kilograms.")
+    
+    # Live Asset Path Fields
+    estimated_cost_new_equivalent: float = Field(description="What would a brand new equivalent of this machine cost in the market today? Do not leave at 0 if is_scrap_liquidation is False.")
+    age_years: int = Field(description="Observed or deduced age of the machinery.")
+    useful_life_years: int = Field(description="Standard economic design life for this machine class (usually 15 years).")
+    condition_percentage_multiplier: float = Field(description="A value between 0.10 (Poor/Barely Working) and 1.00 (Brand New/Excellent) indicating the physical condition factor of the asset based on visual wear, maintenance, and deployment status.")
+    
+    condition_justification: str = Field(description="Detailed engineering observation explaining why this item is classified as live machinery or scrap, citing visual evidence (e.g., presence of structural rust, missing motors, intact assemblies).")
 
 # -----------------------------------------------------------------------------
-# 5. MULTI-FILE PIPELINE CONTROL
+# 5. PROCESSING PIPELINE
 # -----------------------------------------------------------------------------
-uploaded_files = st.file_uploader(
-    "Upload multiple field investigation assets simultaneously...", 
-    type=["png", "jpg", "jpeg", "pdf"], 
-    accept_multiple_files=True
-)
+uploaded_files = st.file_uploader("Upload field files simultaneously...", type=["png", "jpg", "jpeg", "pdf"], accept_multiple_files=True)
 
 if uploaded_files:
-    st.success(f"Successfully staged {len(uploaded_files)} source verification files for processing.")
+    st.success(f"Staged {len(uploaded_files)} files.")
     
-    if MASTER_API_KEY == "PASTE_YOUR_ACTUAL_GEMINI_API_KEY_HERE" or MASTER_API_KEY == "":
-        st.error("❌ Setup Error: Please verify that your real Gemini API key is active on Line 18 inside the code repository.")
+    if MASTER_API_KEY == "PASTE_YOUR_ACTUAL_GEMINI_API_KEY_HERE":
+        st.error("❌ Key Missing: Please update Line 18 with your active Gemini API key.")
     else:
-        if st.button("⚖️ Generate Statutory IVS Valuation Report"):
-            with st.spinner("AI parsing assets and building compliant legal framework..."):
+        if st.button("⚖️ Generate Statutory Conditional Valuation Report"):
+            with st.spinner("AI analyzing condition states and executing conditional routing..."):
                 try:
-                    # Initialize AI Client
                     client = genai.Client(api_key=MASTER_API_KEY)
+                    ai_contents = [types.Part.from_bytes(data=f.read(), mime_type=f.type) for f in uploaded_files]
                     
-                    ai_contents = []
-                    image_html_blocks = ""  # This container will hold our printable HTML image strips
-                    
-                    for idx, f in enumerate(uploaded_files):
-                        raw_bytes = f.read()
-                        # Add to AI request queue
-                        ai_contents.append(types.Part.from_bytes(data=raw_bytes, mime_type=f.type))
-                        
-                        # Process image files specifically to embed into our final printable layout
-                        if f.type in ["image/png", "image/jpeg", "image/jpg"]:
-                            # Convert raw binary image into clean base64 text for embedding inside printable HTML string
-                            b64_img = base64.b64encode(raw_bytes).decode()
-                            image_html_blocks += f"""
-                            <div style='display: inline-block; margin: 15px; text-align: center; border: 1px solid #ccc; padding: 5px; background: #fff;'>
-                                <img src='data:{f.type};base64,{b64_img}' style='max-width: 280px; max-height: 200px; object-fit: contain; display: block;' />
-                                <span style='font-size: 11px; color: #555; font-family: Arial;'>Evidence Photo reference #{idx+1}</span>
-                            </div>
-                            """
-                    
+                    # Force the prompt to prioritize condition differentiation over scrap fallback
                     prompt = """
-                    You are performing a statutory Plant & Machinery appraisal. Analyze the attached files.
-                    Map the item strictly to one of the available materials registry names. 
-                    If it is an active machine, calculate 'estimated_cost_new' using historical commercial databases for this asset class.
+                    Act as an expert Plant and Machinery Valuer. Your primary task is to differentiate between an operational machine and scrap waste.
+                    Look closely at the item integrity: If it is a complete machine, it is NOT scrap, regardless of superficial rust. 
+                    If it is an active machine, calculate 'estimated_cost_new_equivalent' based on global engineering procurement baselines.
+                    Determine the condition_percentage_multiplier strictly based on visual wear and tear.
                     """
                     ai_contents.append(prompt)
                     
-                    # Fire AI Request
                     response = client.models.generate_content(
                         model='gemini-2.5-flash',
                         contents=ai_contents,
                         config=types.GenerateContentConfig(
                             response_mime_type="application/json",
-                            response_schema=StrictAssetSchema,
+                            response_schema=ConditionValuationSchema,
                             temperature=0.0
                         ),
                     )
@@ -127,39 +108,76 @@ if uploaded_files:
                     data = json.loads(response.text)
                     
                     # -----------------------------------------------------------------------------
-                    # 6. REGULATORY COMPLIANCE MATHEMATICAL ENGINE
+                    # 6. MATHEMATICAL ENGINE BYPASSED LOGIC
                     # -----------------------------------------------------------------------------
-                    is_scrap = data.get("is_pure_scrap_pile", False)
+                    is_scrap = data.get("is_scrap_liquidation", False)
                     selected_mat = data.get("exact_material_category", "Mixed / Heavy Melting Scrap (HMS)")
                     weight = data.get("estimated_weight_kg", 0.0)
                     scrap_rate_per_kg = get_scrap_rate(selected_mat)
                     
+                    # Always calculate the scrap floor as a safety minimum
                     scrap_floor_value = weight * scrap_rate_per_kg
-                    cost_new = data.get("estimated_cost_new", 0.0)
-                    gcrc = cost_new * indexation_factor
-                    age = data.get("age_years", 0)
-                    useful_life = data.get("useful_life_years", 15)
                     
                     if is_scrap:
+                        # --- LIQUIDATION ROUTE ---
                         final_fair_value = scrap_floor_value
-                        basis_used = "Liquidation Value Basis (Piecemeal Raw Scrap)"
+                        basis_used = "Liquidation Value Basis (Piecemeal Salvage Scrap)"
+                        calculation_breakdown = f"""
+                        <tr><td>Inherent Material Type</td><td>{selected_mat}</td></tr>
+                        <tr><td>Assessed Total Weight</td><td>{weight:,.2f} KG</td></tr>
+                        <tr><td>Market Scrap Rate applied</td><td>₹ {scrap_rate_per_kg}/kg</td></tr>
+                        <tr style='font-weight:bold; background:#fff0f0;'><td>TOTAL SCRAP VALUE CONCLUSION</td><td>₹ {final_fair_value:,.2f}</td></tr>
+                        """
                     else:
-                        if age >= useful_life:
-                            final_fair_value = scrap_floor_value
-                        else:
-                            depreciable_pool = gcrc - scrap_floor_value
-                            annual_dep = depreciable_pool / useful_life
-                            final_fair_value = gcrc - (annual_dep * age)
+                        # --- LIVE MACHINERY ROUTE (Cost Approach / DRC with Condition Factors) ---
+                        cost_new = data.get("estimated_cost_new_equivalent", 0.0)
+                        gcrc = cost_new * indexation_factor
+                        age = data.get("age_years", 0)
+                        useful_life = data.get("useful_life_years", 15)
+                        condition_factor = data.get("condition_percentage_multiplier", 0.5)
                         
+                        # Apply standard straight-line age depreciation pool
+                        depreciable_pool = gcrc - scrap_floor_value
+                        if age >= useful_life:
+                            drc_value = scrap_floor_value
+                        else:
+                            annual_dep = depreciable_pool / useful_life
+                            drc_value = gcrc - (annual_dep * age)
+                        
+                        # Apply the condition factor multiplier (Differentiating based on wear/tear)
+                        final_fair_value = drc_value * condition_factor
+                        
+                        # Check to ensure a usable machine is never valued below its raw metal scrap floor
                         if final_fair_value < scrap_floor_value:
                             final_fair_value = scrap_floor_value
-                        basis_used = "Market Value Basis / Depreciated Replacement Cost (DRC)"
+                            basis_used = "Market Value Basis / Depreciated Replacement Cost (DRC) — Dropped to Scrap Floor"
+                        else:
+                            basis_used = f"Market Value Basis / Depreciated Replacement Cost (DRC) adjusted for Condition Level ({condition_factor*100:.0f}%)"
+                        
+                        calculation_breakdown = f"""
+                        <tr><td>Estimated Cost New Equivalent</td><td>₹ {cost_new:,.2f}</td></tr>
+                        <tr><td>Gross Current Replacement Cost (GCRC)</td><td>₹ {gcrc:,.2f}</td></tr>
+                        <tr><td>Standard Age-Depreciated Value (DRC)</td><td>₹ {drc_value:,.2f}</td></tr>
+                        <tr><td>AI Condition Multiplier Applied</td><td><b>{condition_factor*100:.0f} %</b> (Based on visual wear)</td></tr>
+                        <tr><td>Inherent Scrap Value Floor (Minimum Melt Value)</td><td>₹ {scrap_floor_value:,.2f}</td></tr>
+                        <tr style='font-weight:bold; background:#e6f2ff;'><td>FINAL CONDITIONAL FAIR VALUE CONCLUSION</td><td>₹ {final_fair_value:,.2f}</td></tr>
+                        """
 
                     # -----------------------------------------------------------------------------
-                    # 7. UNIFIED REPORT WITH DYNAMIC PHOTOGRAPHIC EVIDENCE BLOCKS
+                    # 7. GENERATE PRINTS LAYOUT WITH EVIDENCE IMAGES
                     # -----------------------------------------------------------------------------
-                    st.success("Analysis Complete. Certificate Generation Complete.")
-                    
+                    image_html_blocks = ""
+                    for idx, f in enumerate(uploaded_files):
+                        if f.type in ["image/png", "image/jpeg", "image/jpg"]:
+                            f.seek(0) # Reset stream pointer
+                            b64_img = base64.b64encode(f.read()).decode()
+                            image_html_blocks += f"""
+                            <div style='display: inline-block; margin: 10px; text-align: center; border: 1px solid #ccc; padding: 5px; background: #fff;'>
+                                <img src='data:{f.type};base64,{b64_img}' style='max-width: 240px; max-height: 180px; object-fit: contain; display: block;' />
+                                <span style='font-size: 11px; color: #555;'>Photo Ref #{idx+1}</span>
+                            </div>
+                            """
+
                     html_report = f"""
                     <div style='font-family: Arial, sans-serif; padding: 30px; border: 2px solid #333; background: white; color: black;'>
                         <h2 style='text-align: center; margin-bottom: 5px;'>VALUATION REPORT — PLANT & MACHINERY</h2>
@@ -170,34 +188,30 @@ if uploaded_files:
                             <tr><td><b>Reg No:</b> {reg_number}</td><td><b>Assignment Context:</b> {purpose}</td></tr>
                         </table>
                         
-                        <h3>1. Asset Identification & Technical Parameters</h3>
-                        <table style='width:100%; border-collapse: collapse; font-size:13px;'>
-                            <tr style='background:#f2f2f2;'><th style='border:1px solid #ddd;padding:8px;text-align:left;'>Parameter</th><th style='border:1px solid #ddd;padding:8px;text-align:left;'>Determined Fact / Value</th></tr>
+                        <h3>1. Routing Analysis & Identification</h3>
+                        <p><b>Determined Engine Routing:</b> <span style='background:#ddd; padding:3px 8px; font-weight:bold;'>{"🔴 LIQUIDATION SCRAP" if is_scrap else "⚙️ OPERATIONAL CAPITAL ASSET"}</span></p>
+                        <table style='width:100%; border-collapse: collapse; font-size:13px; margin-bottom:15px;'>
+                            <tr style='background:#f2f2f2;'><th style='border:1px solid #ddd;padding:8px;text-align:left;'>Technical Field Metric</th><th style='border:1px solid #ddd;padding:8px;text-align:left;'>Determined Analysis</th></tr>
                             <tr><td style='border:1px solid #ddd;padding:8px;'>Asset / Item Character</td><td style='border:1px solid #ddd;padding:8px;'>{data.get('asset_name')}</td></tr>
                             <tr><td style='border:1px solid #ddd;padding:8px;'>Manufacturer / Brand</td><td style='border:1px solid #ddd;padding:8px;'>{data.get('manufacturer')}</td></tr>
                             <tr><td style='border:1px solid #ddd;padding:8px;'>Model / Capacity Metric</td><td style='border:1px solid #ddd;padding:8px;'>{data.get('model_or_capacity')}</td></tr>
-                            <tr><td style='border:1px solid #ddd;padding:8px;'>Assessed Metallurgical Composition</td><td style='border:1px solid #ddd;padding:8px;'>{selected_mat}</td></tr>
-                            <tr><td style='border:1px solid #ddd;padding:8px;'>Calculated Metric Weight</td><td style='border:1px solid #ddd;padding:8px;'>{weight:,.2f} KG</td></tr>
-                            <tr><td style='border:1px solid #ddd;padding:8px;'>Physical Vintage / Logged Age</td><td style='border:1px solid #ddd;padding:8px;'>{age} Years (Estimated Useful Life: {useful_life} Years)</td></tr>
+                            <tr><td style='border:1px solid #ddd;padding:8px;'>Assessed Metallurgical Profile</td><td style='border:1px solid #ddd;padding:8px;'>{selected_mat}</td></tr>
                         </table>
                         
-                        <h3>2. Condition Assessment & Disclosures</h3>
+                        <h3>2. Condition Justification Statement</h3>
                         <p style='font-size:13px; font-style: italic; background: #fafafa; padding: 10px; border-left: 3px solid #0066cc;'>"{data.get('condition_justification')}"</p>
                         
-                        <h3>3. Valuation Methodology & Financial Computations</h3>
-                        <p style='font-size:13px;'><b>Adopted Valuation Approach:</b> {basis_used}</p>
+                        <h3>3. Financial Engineering Computations</h3>
+                        <p style='font-size:13px;'><b>Adopted Valuation Framework Basis:</b> {basis_used}</p>
                         <table style='width:100%; border-collapse: collapse; font-size:13px;'>
-                            <tr><td style='border:1px solid #ddd;padding:8px;'>Estimated Cost New Equivalent</td><td style='border:1px solid #ddd;padding:8px;'>₹ {cost_new:,.2f}</td></tr>
-                            <tr><td style='border:1px solid #ddd;padding:8px;'>Gross Current Replacement Cost (GCRC after Indexation)</td><td style='border:1px solid #ddd;padding:8px;'>₹ {gcrc:,.2f}</td></tr>
-                            <tr><td style='border:1px solid #ddd;padding:8px;'>Inherent Material Scrap Value Floor (@ ₹{scrap_rate_per_kg}/kg)</td><td style='border:1px solid #ddd;padding:8px;'>₹ {scrap_floor_value:,.2f}</td></tr>
-                            <tr style='background:#e6f2ff; font-weight:bold;'><td style='border:1px solid #ddd;padding:8px;'>FINAL ASSESSED VALUE CONCLUSION</td><td style='border:1px solid #ddd;padding:8px;'>₹ {final_fair_value:,.2f}</td></tr>
+                            <tr style='background:#f2f2f2;'><th style='border:1px solid #ddd;padding:8px;text-align:left;'>Calculation Element</th><th style='border:1px solid #ddd;padding:8px;text-align:left;'>Value Amount (INR)</th></tr>
+                            {calculation_breakdown}
                         </table>
                         
                         <div style='page-break-before: always;'></div>
-                        <h3>4. Photographic Evidence & Field Verification Logs</h3>
-                        <p style='font-size:12px; color: #666;'>The following geo-tagged or asset-verified site data was extracted and validated natively inside the valuation computational sequence:</p>
+                        <h3>4. Photographic Evidence Verification Logs</h3>
                         <div style='background: #fdfdfd; padding: 10px; border: 1px dashed #bbb; text-align: center;'>
-                            {image_html_blocks if image_html_blocks else "<p style='color:red;'>No visual data files attached for verification logging.</p>"}
+                            {image_html_blocks if image_html_blocks else "<p style='color:red;'>No visual data files attached.</p>"}
                         </div>
 
                         <br/><br/>
@@ -208,10 +222,9 @@ if uploaded_files:
                     """
                     st.markdown(html_report, unsafe_allow_html=True)
                     
-                    # Package integrated report + image structures into a single file output
                     st.markdown("### 📥 Document Export Actions")
                     b64_html = base64.b64encode(html_report.encode()).decode()
-                    href = f'<a href="data:text/html;base64,{b64_html}" download="IVS_Valuation_Report.html" style="padding:10px 20px; background-color:#0066cc; color:white; text-decoration:none; border-radius:4px; font-weight:bold;">Download Printable Valuation Certificate</a>'
+                    href = f'<a href="data:text/html;base64,{b64_html}" download="IVS_Conditional_Valuation_Report.html" style="padding:10px 20px; background-color:#0066cc; color:white; text-decoration:none; border-radius:4px; font-weight:bold;">Download Printable Valuation Certificate</a>'
                     st.markdown(href, unsafe_allow_html=True)
                     
                 except Exception as e:
