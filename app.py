@@ -13,11 +13,13 @@ st.title("⚖️ Condition-Based Plant & Machinery Valuation Platform")
 st.subheader("Dynamic Routing: Operational Depreciated Replacement Cost (DRC) vs. Liquidation Scrap Value")
 
 # -----------------------------------------------------------------------------
-# 2. HARDCODED SECURE KEY ACCESS
+# 2. SECURE CLOUD KEY ROUTING (NO INLINE TEXT LEAKS)
 # -----------------------------------------------------------------------------
-MASTER_API_KEY = "AQ.Ab8RN6IZasHARbJ0xfDruUynpXOiV9ybUJ0PUmktaDTTylERug"
-
-# -----------------------------------------------------------------------------
+# Pulls directly from your private Streamlit Cloud Secrets dashboard page
+if "GEMINI_API_KEY" in st.secrets:
+    MASTER_API_KEY = st.secrets["GEMINI_API_KEY"]
+else:
+    MASTER_API_KEY = ""
 # 3. SIDEBAR CONFIGURATION: PROFILE & RATES
 # -----------------------------------------------------------------------------
 with st.sidebar:
