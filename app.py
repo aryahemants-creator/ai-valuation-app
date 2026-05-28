@@ -16,7 +16,7 @@ st.subheader("Fully Aligned with International Valuation Standards (IVS) & Govt 
 # 2. HARDCODED SECURE KEY ACCESS (BYPASSES CLOUD SETTINGS)
 # -----------------------------------------------------------------------------
 # Paste your raw Gemini API key inside the quotes below:
-MASTER_API_KEY = "PASTE_YOUR_ACTUAL_GEMINI_API_KEY_HERE"
+MASTER_API_KEY = "AIzaSyAfK09Zlf3D19L4PMwMj-Qsp-d0BUL7nXc"
 
 # -----------------------------------------------------------------------------
 # 3. SIDEBAR CONFIGURATION: USER PROFILE & MARKT SCRAP RATES
