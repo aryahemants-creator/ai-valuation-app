@@ -13,12 +13,9 @@ st.title("⚖️ Statutory Plant & Machinery Valuation Platform")
 st.subheader("Fully Aligned with International Valuation Standards (IVS) & Govt Regulatory Codes")
 
 # -----------------------------------------------------------------------------
-# 2. ENHANCED SIDEBAR: COMPLIANCE METRICS & EXPANDED MATERIAL REGISTRY
+# 2. ENHANCED SIDEBAR: USER INPUTS ONLY (API KEY REMOVED)
 # -----------------------------------------------------------------------------
 with st.sidebar:
-    st.header("🔑 Authentication")
-    api_key = st.text_input("Enter Gemini API Key:", type="password")
-    
     st.header("📋 Appraiser & Statutory Profile")
     valuer_name = st.text_input("Registered Valuer Name:", value="Registered Valuer (P&M)")
     reg_number = st.text_input("Registration / License Number:", value="IBBI/RV/PM/EXAMPLE")
@@ -45,8 +42,12 @@ with st.sidebar:
         "Mixed / Heavy Melting Scrap (HMS)": st.number_input("HMS Fallback Rate:", value=31.0)
     }
 
+# Helper function to match scrap types to user sidebar settings
+def get_scrap_rate(material_type: str) -> float:
+    return rates.get(material_type, 31.0)
+
 # -----------------------------------------------------------------------------
-# 3. EXPLICIT EXTRACTION SCHEMA (PREVENTS MISIDENTIFICATION)
+# 3. EXPLICIT EXTRACTION SCHEMA
 # -----------------------------------------------------------------------------
 class StrictAssetSchema(BaseModel):
     is_pure_scrap_pile: bool = Field(description="Strictly set to True ONLY if this item is abandoned, dismantled junk, or raw metal waste. Set to False if this is an operational or stand-by asset/machine.")
@@ -69,121 +70,119 @@ uploaded_files = st.file_uploader(
     accept_multiple_files=True
 )
 
-if uploaded_files and api_key:
-    if st.button("⚖️ Generate Statutory IVS Valuation Report"):
-        with st.spinner("AI parsing assets and building compliant legal framework..."):
-            try:
-                client = genai.Client(api_key=api_key)
-                ai_contents = [types.Part.from_bytes(data=f.read(), mime_type=f.type) for f in uploaded_files]
-                
-                prompt = f"""
-                You are performing a statutory Plant & Machinery appraisal. Analyze the attached files.
-                Map the item strictly to one of the available materials registry names. 
-                If it is an active machine, calculate 'estimated_cost_new' using historical commercial databases for this asset class.
-                """
-                ai_contents.append(prompt)
-                
-                response = client.models.generate_content(
-                    model='gemini-2.5-flash',
-                    contents=ai_contents,
-                    config=types.GenerateContentConfig(
-                        response_mime_type="application/json",
-                        response_schema=StrictAssetSchema,
-                        temperature=0.0
-                    ),
-                )
-                
-                data = json.loads(response.text)
-                
-                # -----------------------------------------------------------------------------
-                # 5. DUAL-METHOD COMPLIANCE ENGINEERING MATH
-                # -----------------------------------------------------------------------------
-                is_scrap = data.get("is_pure_scrap_pile", False)
-                selected_mat = data.get("exact_material_category", "Mixed / Heavy Melting Scrap (HMS)")
-                weight = data.get("estimated_weight_kg", 0.0)
-                scrap_rate_per_kg = rates.get(selected_mat, 31.0)
-                
-                # Calculate Scrap Value Floor
-                scrap_floor_value = weight * scrap_rate_per_kg
-                
-                # Cost Approach calculations
-                cost_new = data.get("estimated_cost_new", 0.0)
-                gcrc = cost_new * indexation_factor
-                age = data.get("age_years", 0)
-                useful_life = data.get("useful_life_years", 15)
-                
-                if is_scrap:
-                    final_fair_value = scrap_floor_value
-                    basis_used = "Liquidation Value Basis (Piecemeal Raw Scrap)"
-                else:
-                    # Depreciated Replacement Cost Method (DRC)
-                    if age >= useful_life:
+if uploaded_files:
+    st.success(f"Successfully staged {len(uploaded_files)} source verification files for processing.")
+    
+    # Check if API Key exists in secure cloud secrets
+    if "GEMINI_API_KEY" not in st.secrets:
+        st.error("❌ Cloud Error: Gemini API Key is not configured in Streamlit Advanced Settings.")
+    else:
+        if st.button("⚖️ Generate Statutory IVS Valuation Report"):
+            with st.spinner("AI parsing assets and building compliant legal framework..."):
+                try:
+                    # Automatically pull key from secure cloud backend
+                    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
+                    
+                    ai_contents = [types.Part.from_bytes(data=f.read(), mime_type=f.type) for f in uploaded_files]
+                    
+                    prompt = """
+                    You are performing a statutory Plant & Machinery appraisal. Analyze the attached files.
+                    Map the item strictly to one of the available materials registry names. 
+                    If it is an active machine, calculate 'estimated_cost_new' using historical commercial databases for this asset class.
+                    """
+                    ai_contents.append(prompt)
+                    
+                    response = client.models.generate_content(
+                        model='gemini-2.5-flash',
+                        contents=ai_contents,
+                        config=types.GenerateContentConfig(
+                            response_mime_type="application/json",
+                            response_schema=StrictAssetSchema,
+                            temperature=0.0
+                        ),
+                    )
+                    
+                    data = json.loads(response.text)
+                    
+                    # -----------------------------------------------------------------------------
+                    # 5. DUAL-METHOD COMPLIANCE ENGINEERING MATH
+                    # -----------------------------------------------------------------------------
+                    is_scrap = data.get("is_pure_scrap_pile", False)
+                    selected_mat = data.get("exact_material_category", "Mixed / Heavy Melting Scrap (HMS)")
+                    weight = data.get("estimated_weight_kg", 0.0)
+                    scrap_rate_per_kg = get_scrap_rate(selected_mat)
+                    
+                    scrap_floor_value = weight * scrap_rate_per_kg
+                    cost_new = data.get("estimated_cost_new", 0.0)
+                    gcrc = cost_new * indexation_factor
+                    age = data.get("age_years", 0)
+                    useful_life = data.get("useful_life_years", 15)
+                    
+                    if is_scrap:
                         final_fair_value = scrap_floor_value
+                        basis_used = "Liquidation Value Basis (Piecemeal Raw Scrap)"
                     else:
-                        depreciable_pool = gcrc - scrap_floor_value
-                        annual_dep = depreciable_pool / useful_life
-                        final_fair_value = gcrc - (annual_dep * age)
-                    
-                    if final_fair_value < scrap_floor_value:
-                        final_fair_value = scrap_floor_value
-                    basis_used = "Market Value Basis / Depreciated Replacement Cost (DRC)"
+                        if age >= useful_life:
+                            final_fair_value = scrap_floor_value
+                        else:
+                            depreciable_pool = gcrc - scrap_floor_value
+                            annual_dep = depreciable_pool / useful_life
+                            final_fair_value = gcrc - (annual_dep * age)
+                        
+                        if final_fair_value < scrap_floor_value:
+                            final_fair_value = scrap_floor_value
+                        basis_used = "Market Value Basis / Depreciated Replacement Cost (DRC)"
 
-                # -----------------------------------------------------------------------------
-                # 6. RENDER ON-SCREEN INTERACTIVE DASHBOARD
-                # -----------------------------------------------------------------------------
-                st.success("Analysis Complete. IVS Compliance Framework Established.")
-                
-                # -----------------------------------------------------------------------------
-                # 7. GENERATING THE STRIP-DOWN LEGAL PDF PRINT LAYOUT
-                # -----------------------------------------------------------------------------
-                html_report = f"""
-                <div style='font-family: Arial, sans-serif; padding: 30px; border: 2px solid #333;'>
-                    <h2 style='text-align: center; margin-bottom: 5px;'>VALUATION REPORT — PLANT & MACHINERY</h2>
-                    <p style='text-align: center; font-size: 12px; color: #555;'>Prepared in Compliance with International Valuation Standards (IVS 300)</p>
-                    <hr/>
-                    <table style='width:100%; font-size:14px; margin-bottom:20px;'>
-                        <tr><td><b>Appraiser:</b> {valuer_name}</td><td><b>Date of Valuation:</b> 2026-05-28</td></tr>
-                        <tr><td><b>Reg No:</b> {reg_number}</td><td><b>Assignment Context:</b> {purpose}</td></tr>
-                    </table>
+                    # -----------------------------------------------------------------------------
+                    # 6. PRINT LAYOUT OUTPUT
+                    # -----------------------------------------------------------------------------
+                    st.success("Analysis Complete. IVS Compliance Framework Established.")
                     
-                    <h3>1. Asset Identification & Technical Parameters</h3>
-                    <table style='width:100%; border-collapse: collapse; font-size:13px;'>
-                        <tr style='background:#f2f2f2;'><th style='border:1px solid #ddd;padding:8px;text-align:left;'>Parameter</th><th style='border:1px solid #ddd;padding:8px;text-align:left;'>Determined Fact / Value</th></tr>
-                        <tr><td style='border:1px solid #ddd;padding:8px;'>Asset / Item Character</td><td style='border:1px solid #ddd;padding:8px;'>{data.get('asset_name')}</td></tr>
-                        <tr><td style='border:1px solid #ddd;padding:8px;'>Manufacturer / Brand</td><td style='border:1px solid #ddd;padding:8px;'>{data.get('manufacturer')}</td></tr>
-                        <tr><td style='border:1px solid #ddd;padding:8px;'>Model / Capacity Metric</td><td style='border:1px solid #ddd;padding:8px;'>{data.get('model_or_capacity')}</td></tr>
-                        <tr><td style='border:1px solid #ddd;padding:8px;'>Assessed Metallurgical Composition</td><td style='border:1px solid #ddd;padding:8px;'>{selected_mat}</td></tr>
-                        <tr><td style='border:1px solid #ddd;padding:8px;'>Calculated Metric Weight</td><td style='border:1px solid #ddd;padding:8px;'>{weight:,.2f} KG</td></tr>
-                        <tr><td style='border:1px solid #ddd;padding:8px;'>Physical Vintage / Logged Age</td><td style='border:1px solid #ddd;padding:8px;'>{age} Years (Estimated Useful Life: {useful_life} Years)</td></tr>
-                    </table>
+                    html_report = f"""
+                    <div style='font-family: Arial, sans-serif; padding: 30px; border: 2px solid #333; background: white; color: black;'>
+                        <h2 style='text-align: center; margin-bottom: 5px;'>VALUATION REPORT — PLANT & MACHINERY</h2>
+                        <p style='text-align: center; font-size: 12px; color: #555;'>Prepared in Compliance with International Valuation Standards (IVS 300)</p>
+                        <hr/>
+                        <table style='width:100%; font-size:14px; margin-bottom:20px;'>
+                            <tr><td><b>Appraiser:</b> {valuer_name}</td><td><b>Date of Valuation:</b> 2026-05-28</td></tr>
+                            <tr><td><b>Reg No:</b> {reg_number}</td><td><b>Assignment Context:</b> {purpose}</td></tr>
+                        </table>
+                        
+                        <h3>1. Asset Identification & Technical Parameters</h3>
+                        <table style='width:100%; border-collapse: collapse; font-size:13px;'>
+                            <tr style='background:#f2f2f2;'><th style='border:1px solid #ddd;padding:8px;text-align:left;'>Parameter</th><th style='border:1px solid #ddd;padding:8px;text-align:left;'>Determined Fact / Value</th></tr>
+                            <tr><td style='border:1px solid #ddd;padding:8px;'>Asset / Item Character</td><td style='border:1px solid #ddd;padding:8px;'>{data.get('asset_name')}</td></tr>
+                            <tr><td style='border:1px solid #ddd;padding:8px;'>Manufacturer / Brand</td><td style='border:1px solid #ddd;padding:8px;'>{data.get('manufacturer')}</td></tr>
+                            <tr><td style='border:1px solid #ddd;padding:8px;'>Model / Capacity Metric</td><td style='border:1px solid #ddd;padding:8px;'>{data.get('model_or_capacity')}</td></tr>
+                            <tr><td style='border:1px solid #ddd;padding:8px;'>Assessed Metallurgical Composition</td><td style='border:1px solid #ddd;padding:8px;'>{selected_mat}</td></tr>
+                            <tr><td style='border:1px solid #ddd;padding:8px;'>Calculated Metric Weight</td><td style='border:1px solid #ddd;padding:8px;'>{weight:,.2f} KG</td></tr>
+                            <tr><td style='border:1px solid #ddd;padding:8px;'>Physical Vintage / Logged Age</td><td style='border:1px solid #ddd;padding:8px;'>{age} Years (Estimated Useful Life: {useful_life} Years)</td></tr>
+                        </table>
+                        
+                        <h3>2. Condition Assessment & Disclosures</h3>
+                        <p style='font-size:13px; font-style: italic; background: #fafafa; padding: 10px; border-left: 3px solid #0066cc;'>"{data.get('condition_justification')}"</p>
+                        
+                        <h3>3. Valuation Methodology & Financial Computations</h3>
+                        <p style='font-size:13px;'><b>Adopted Valuation Approach:</b> {basis_used}</p>
+                        <table style='width:100%; border-collapse: collapse; font-size:13px;'>
+                            <tr><td style='border:1px solid #ddd;padding:8px;'>Estimated Cost New Equivalent</td><td style='border:1px solid #ddd;padding:8px;'>₹ {cost_new:,.2f}</td></tr>
+                            <tr><td style='border:1px solid #ddd;padding:8px;'>Gross Current Replacement Cost (GCRC after Indexation)</td><td style='border:1px solid #ddd;padding:8px;'>₹ {gcrc:,.2f}</td></tr>
+                            <tr><td style='border:1px solid #ddd;padding:8px;'>Inherent Material Scrap Value Floor (@ ₹{scrap_rate_per_kg}/kg)</td><td style='border:1px solid #ddd;padding:8px;'>₹ {scrap_floor_value:,.2f}</td></tr>
+                            <tr style='background:#e6f2ff; font-weight:bold;'><td style='border:1px solid #ddd;padding:8px;'>FINAL ASSESSED VALUE CONCLUSION</td><td style='border:1px solid #ddd;padding:8px;'>₹ {final_fair_value:,.2f}</td></tr>
+                        </table>
+                        
+                        <br/><br/>
+                        <table style='width:100%; font-size:12px; margin-top:30px;'>
+                            <tr><td style='text-align:center;'>___________________________<br/><b>Verified by AI Engine</b></td><td style='text-align:center;'>___________________________<br/><b>Signature of Registered Valuer</b></td></tr>
+                        </table>
+                    </div>
+                    """
+                    st.markdown(html_report, unsafe_allow_html=True)
                     
-                    <h3>2. Condition Assessment & Disclosures</h3>
-                    <p style='font-size:13px; font-style: italic; background: #fafafa; padding: 10px; border-left: 3px solid #0066cc;'>"{data.get('condition_justification')}"</p>
+                    st.markdown("### 📥 Document Export Actions")
+                    b64_html = base64.b64encode(html_report.encode()).decode()
+                    href = f'<a href="data:text/html;base64,{b64_html}" download="IVS_Valuation_Report.html" style="padding:10px 20px; background-color:#0066cc; color:white; text-decoration:none; border-radius:4px; font-weight:bold;">Download Printable Valuation Certificate</a>'
+                    st.markdown(href, unsafe_allow_html=True)
                     
-                    <h3>3. Valuation Methodology & Financial Computations</h3>
-                    <p style='font-size:13px;'><b>Adopted Valuation Approach:</b> {basis_used}</p>
-                    <table style='width:100%; border-collapse: collapse; font-size:13px;'>
-                        <tr><td style='border:1px solid #ddd;padding:8px;'>Estimated Cost New Equivalent</td><td style='border:1px solid #ddd;padding:8px;'>₹ {cost_new:,.2f}</td></tr>
-                        <tr><td style='border:1px solid #ddd;padding:8px;'>Gross Current Replacement Cost (GCRC after Indexation)</td><td style='border:1px solid #ddd;padding:8px;'>₹ {gcrc:,.2f}</td></tr>
-                        <tr><td style='border:1px solid #ddd;padding:8px;'>Inherent Material Scrap Value Floor (@ ₹{scrap_rate_per_kg}/kg)</td><td style='border:1px solid #ddd;padding:8px;'>₹ {scrap_floor_value:,.2f}</td></tr>
-                        <tr style='background:#e6f2ff; font-weight:bold;'><td style='border:1px solid #ddd;padding:8px;'>FINAL ASSESSED VALUE CONCLUSION</td><td style='border:1px solid #ddd;padding:8px;'>₹ {final_fair_value:,.2f}</td></tr>
-                    </table>
-                    
-                    <br/><br/>
-                    <table style='width:100%; font-size:12px; margin-top:30px;'>
-                        <tr><td style='text-align:center;'>___________________________<br/><b>Verified by AI Engine</b></td><td style='text-align:center;'>___________________________<br/><b>Signature of Registered Valuer</b></td></tr>
-                    </table>
-                </div>
-                """
-                
-                # Display report inside the browser screen
-                st.markdown(html_report, unsafe_allow_html=True)
-                
-                # Add a quick "Print / Save to PDF" utility button directly into the dashboard
-                st.markdown("### 📥 Document Export Actions")
-                b64_html = base64.b64encode(html_report.encode()).decode()
-                href = f'<a href="data:text/html;base64,{b64_html}" download="IVS_Valuation_Report.html" style="padding:10px 20px; background-color:#0066cc; color:white; text-decoration:none; border-radius:4px; font-weight:bold;">⬇️ Download Printable Valuation Certificate</a>'
-                st.markdown(href, unsafe_allow_html=True)
-                
-            except Exception as e:
-                st.error(f"Execution Error: {e}")
+                except Exception as e:
+                    st.error(f"Execution Error: {e}")
